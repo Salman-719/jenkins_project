@@ -1,0 +1,89 @@
+pipeline {
+    agent any
+    
+    environment {
+        VIRTUAL_ENV = 'venv'
+    }
+    
+    stages {
+        stage('Setup') {
+            steps {
+                script {
+                    if (!fileExists("${env.WORKSPACE}/${VIRTUAL_ENV}")) {
+                        sh "python3 -m venv ${VIRTUAL_ENV}"
+                    }
+                    // Install lab deps from requirements + tools used in graded steps
+                    sh """
+                        source ${VIRTUAL_ENV}/bin/activate
+                        pip install --upgrade pip
+                        pip install -r requirements.txt
+                        pip install pytest coverage bandit
+                    """
+                }
+            }
+        }
+
+        stage('Lint') {
+            steps {
+                sh "source ${VIRTUAL_ENV}/bin/activate && flake8 app.py"
+            }
+        }
+
+        stage('Test') {
+            steps {
+                sh "source ${VIRTUAL_ENV}/bin/activate && pytest"
+            }
+        }
+
+        // === GRADED ADDITIONS ===
+        stage('Coverage') {
+            steps {
+                sh """
+                    source ${VIRTUAL_ENV}/bin/activate
+                    coverage run -m pytest
+                    coverage xml
+                    coverage html
+                    coverage report
+                """
+                // Archive the coverage report
+                archiveArtifacts artifacts: 'coverage.xml', fingerprint: true, allowEmptyArchive: true
+                archiveArtifacts artifacts: 'htmlcov/**', fingerprint: true, allowEmptyArchive: true
+            }
+        }
+
+        stage('Security Scan') {
+            steps {
+                sh """
+                    source ${VIRTUAL_ENV}/bin/activate
+                    bandit -r . -f txt -o bandit_report.txt || true
+                """
+                // Archive the security scan report
+                archiveArtifacts artifacts: 'bandit_report.txt', fingerprint: true, allowEmptyArchive: true
+            }
+        }
+        // === END GRADED ADDITIONS ===
+
+        stage('Deploy') {
+            steps {
+                script {
+                    // Placeholder — keep simple for the lab:
+                    sh 'echo "Deploying application..."'
+                    sh 'echo "Application deployed successfully!"'
+                    // Example (optional): rsync/ssh to a remote host if you have one
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            cleanWs()
+        }
+        success {
+            echo 'Pipeline completed successfully!'
+        }
+        failure {
+            echo 'Pipeline failed!'
+        }
+    }
+}
